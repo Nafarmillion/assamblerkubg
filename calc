@@ -1,0 +1,220 @@
+.model SMALL
+
+.data
+X dw 0
+Y dw 0
+res dw 0
+message_1 db 'This program gives you a result of "2X - (X/(2Y))"',0AH, 0DH, '$'
+message_2 db 'You can enter one number for X and one number for Y (both must be greater than 0)',0AH, 0DH, '$'
+message_3 db 'If you want to exit, enter "n" or "N"',0AH, 0DH, '$'
+message_4 db 'Enter X (The fractional part will disappear)-> $'
+message_5 db 'Enter Y (The fractional part will disappear)-> $'
+message_6 db 'Would you like to continue? (y/n (any key)) ->$'
+message_exit db 'See you later!$'
+message_error db 'Invalid value! $'
+
+.code
+
+CMD_CLEAR:
+    MOV AH, 0 ; Установка режима экрана
+    MOV AL, 2 ; Код режима 80x25 черно-белого экрана
+    INT 10H ; Очистка экрана
+    ret
+
+CMD_GO_TO:
+    cmp AL, 79h
+    je Start
+    call CMD_CLEAR
+    MOV AH, 2 ; Установка курсора
+    MOV BH, 0 ; Номер страницы
+    MOV DH, 2 ; Строка
+    MOV DL, 30 ; Столбец
+    INT 10H ; Позиционирование курсора
+    MOV AH, 9 ; Вывод строки
+    LEA DX, message_exit ; Загрузка адреса сообщения о завершении
+    INT 21H ; Печать сообщения на позиции курсора
+    mov ax, 4c00h
+    int 21h
+    ret
+
+.startup
+
+Start:
+    MOV AH, 0 ; Установка режима экрана
+    MOV AL, 2 ; Код режима 80x25 черно-белого экрана
+    INT 10H ; Очистка экрана
+
+    ; Просьба ввести X
+    MOV AH, 2 ; Установка курсора
+    MOV BH, 0 ; Номер страницы
+    MOV DH, 0 ; Строка
+    MOV DL, 0 ; Столбец
+    INT 10H ; Позиционирование курсора
+
+    ; Вывод сообщений
+    MOV AH, 9 ; Функция вывода строки
+    LEA DX, message_1 ; Загрузка адреса сообщения о программе
+    INT 21H ; Печать сообщения на позиции курсора
+    LEA DX, message_2 ; Загрузка адреса второго сообщения
+    INT 21H ; Печать сообщения на следующей строке
+
+    ; Просьба ввести X
+    LEA DX, message_4 ; Загрузка адреса сообщения для ввода X
+    INT 21H ; Отображение сообщения
+
+    mov ah, 01h
+    int 21h ; Ввод первого символа
+
+    sub al, 30h ; Преобразование символа в целое число
+
+    mov ah, 0 ; Очистка старшего байта в AX
+    mov bx, 10
+    mov cx, ax ; Сохранение введенного X в CX
+
+    PRESS_KEY:
+    Loop1:
+    mov ah, 01h
+    int 21h ; Ввод следующего символа
+
+    cmp al, 0dh ; Сравнение с символом Enter
+    je End1 ; Если нажата клавиша Enter, завершение ввода
+
+    sub al, 30h ; Преобразование символа в целое число
+    cbw ; Знаковое расширение AL до AX
+    xchg ax, cx ; Обмен AX и CX
+    mul bx ; Умножение CX на 10
+    add cx, ax ; Добавление результата к CX
+
+    jmp Loop1 ; Продолжение ввода
+
+    End1:
+    mov ax, cx ; Копирование окончательного значения X обратно в AX
+    jmp Prompt_Y ; Просьба ввести Y
+
+    Prompt_Y:
+    ; Просьба ввести Y
+    MOV AH, 2 ; Установка курсора
+    MOV BH, 0 ; Номер страницы
+    MOV DH, 3 ; Строка
+    MOV DL, 0 ; Столбец
+    INT 10H ; Позиционирование курсора
+
+    ; Просьба ввести Y
+    LEA DX, message_5 ; Загрузка адреса сообщения для ввода Y
+    INT 21H ; Отображение сообщения
+
+    mov ah, 01h
+    int 21h ; Ввод первого символа
+
+    sub al, 30h ; Преобразование символа в целое число
+
+    mov ah, 0 ; Очистка старшего байта в AX
+    mov bx, 10
+    mov cx, ax ; Сохранение введенного Y в CX
+
+    PRESS_KEY_Y:
+    Loop1_Y:
+    mov ah, 01h
+    int 21h ; Ввод следующего символа
+
+    cmp al, 0dh ; Сравнение с символом Enter
+    je End1_Y ; Если нажата клавиша Enter, завершение ввода
+
+    sub al, 30h ; Преобразование символа в целое число
+    cbw ; Знаковое расширение AL до AX
+    xchg ax, cx ; Обмен AX и CX
+    mul bx ; Умножение CX на 10
+    add cx, ax ; Добавление результата к CX
+
+    jmp Loop1_Y ; Продолжение ввода
+
+    End1_Y:
+    mov bx, cx ; Копирование окончательного значения Y в BX
+
+    Show_Res:
+    cmp ax, 255
+    jg CMD_ERROR
+    cmp ax, 0
+    jle CMD_ERROR
+
+    ; Вычисление результата: 2X - (X / (2Y))
+    mov dx, 0 ; Очистка старшего слова DX
+    imul ax, 2 ; Вычисление 2X
+    idiv bx ; Деление на 2Y
+    sub ax, dx ; Вычитание частного из результата
+
+    ; Вывод результата
+    mov bl, 4 ; Вывод 4 знаков после запятой
+    xor cx, cx ; Очистка CX
+    mov bx, 10 ; Установка BX в 10 для преобразования цифр
+
+    lp1:
+    xor dx, dx ; Очистка DX
+    div bx ; Деление AX на 10
+    add dl, '0' ; Преобразование остатка в символ
+    push dx ; Помещение символа в стек
+    inc cx ; Увеличение CX
+    or ax, ax ; Проверка, не стало ли AX равным нулю
+    jnz lp1 ; Если нет, продолжить цикл
+
+    lp2:
+    pop ax ; Извлечение символа из стека
+    int 29h ; Вывод символа
+    loop lp2 ; Повторить для всех символов
+
+    jmp CMD_ASK_MESSAGE
+
+CMD_ERROR:
+    mov ax, 0
+    mov cx, 0
+
+    ; Вывод сообщения об ошибке
+    MOV AH, 2 ; Установка курсора
+    MOV BH, 0 ; Номер страницы
+    MOV DH, 6 ; Строка
+    MOV DL, 0 ; Столбец
+    INT 10H ; Позиционирование курсора
+
+    ; Вывод сообщения об ошибке
+    MOV AH, 9 ; Функция вывода строки
+    LEA DX, message_error ; Загрузка адреса сообщения об ошибке
+    INT 21H ; Печать сообщения на позиции курсора
+
+    jmp CMD_ASK_MESSAGE
+
+CMD_ASK_MESSAGE:
+    ; Спросить пользователя, хочет ли он продолжить
+    MOV AH, 2 ; Установка курсора
+    MOV BH, 0 ; Номер страницы
+    MOV DH, 8 ; Строка
+    MOV DL, 0 ; Столбец
+    INT 10H ; Позиционирование курсора
+
+    ; Спросить, хочет ли пользователь продолжить
+    MOV AH, 9 ; Функция вывода строки
+    LEA DX, message_6 ; Загрузка адреса сообщения о продолжении
+    INT 21H ; Печать сообщения на позиции курсора
+
+    INT 10H ; Позиционирование курсора
+    MOV AH, 1 ; Функция ввода DOS
+    INT 21H ; Получить символ
+
+    CMP AL, 0 ; Проверка на нулевой символ
+    JZ CMD_ASK_MESSAGE ; Если это нуль, продолжить спрашивать
+    call CMD_GO_TO
+
+    jmp CMD_ASK_MESSAGE
+
+Exit:
+    call CMD_CLEAR
+    MOV AH, 2 ; Установка курсора
+    MOV BH, 0 ; Номер страницы
+    MOV DH, 2 ; Строка
+    MOV DL, 30 ; Столбец
+    INT 10H ; Позиционирование курсора
+    MOV AH, 9 ; Функция вывода строки
+    LEA DX, message_exit ; Загрузка адреса сообщения о завершении
+    INT 21H ; Печать сообщения на позиции курсора
+
+.exit
+end
